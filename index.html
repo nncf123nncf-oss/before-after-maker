@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ビフォーアフター比較画像メーカー</title>
+<style>
+  :root {
+    --bg: #2B2E33;
+    --surface: #383C42;
+    --text: #F1F2F4;
+    --muted: #A9AFB8;
+    --accent: #4FB0FF;
+    --on-accent: #06202E;
+    --danger: #FF9187;
+    --border: #4A4F57;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .lead { font-size: 14px; color: var(--muted); margin: 0 0 16px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin: 0 0 16px;
+  }
+  .panel h2 { font-size: 14px; color: var(--muted); margin: 0 0 8px; font-weight: normal; }
+
+  .field { margin: 0 0 16px; }
+  .field:last-child { margin-bottom: 0; }
+  .field > label {
+    display: block;
+    font-size: 14px;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
+  input[type="file"] {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+    color: var(--text);
+  }
+  input[type="file"]::file-selector-button {
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+    padding: 8px 12px;
+    margin-right: 8px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .filename {
+    margin: 8px 0 0;
+    font-size: 14px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .toggle { display: flex; gap: 8px; }
+  .toggle button {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px;
+    font-family: system-ui, sans-serif;
+    font-size: 16px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .toggle button[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-color: var(--accent);
+  }
+
+  #preview {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #FFFFFF;
+  }
+  .hint { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+
+  #save {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 12px;
+    font-family: system-ui, sans-serif;
+    font-size: 16px;
+    background: var(--accent);
+    color: var(--on-accent);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .errorline {
+    min-height: 24px;
+    margin: 8px 0 0;
+    font-size: 14px;
+    color: var(--danger);
+    overflow-wrap: anywhere;
+  }
+
+  /* 運営者表記フッタ。ツール本体の配色に依存させず自己完結させる。 */
+  .mw-footer {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    margin: 24px 0 0;
+    padding: 16px;
+    background: #F7F7F8;
+    border: 1px solid #D8D8DC;
+    border-radius: 6px;
+    color: #3A3A3E;
+    font-family: system-ui, sans-serif;
+    font-size: 12px;
+    line-height: 1.7;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .mw-footer p { margin: 0 0 6px; }
+  .mw-footer p:last-child { margin-bottom: 0; }
+  .mw-footer a { color: #0B5AA6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>ビフォーアフター比較画像メーカー</h1>
+    <p class="lead">Before写真とAfter写真を選ぶだけで、ラベルと区切り線つきの1枚にまとめます</p>
+  </header>
+
+  <div class="panel">
+    <h2>写真を選ぶ</h2>
+    <div class="field">
+      <label for="beforeFile">Before（作業前）の写真</label>
+      <input type="file" id="beforeFile" accept="image/*">
+      <p class="filename" id="beforeName">まだ選ばれていません</p>
+    </div>
+    <div class="field">
+      <label for="afterFile">After（作業後）の写真</label>
+      <input type="file" id="afterFile" accept="image/*">
+      <p class="filename" id="afterName">まだ選ばれていません</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>ラベルの言葉</h2>
+    <div class="toggle" id="langToggle">
+      <button type="button" data-lang="en" aria-pressed="true">Before/After</button>
+      <button type="button" data-lang="ja" aria-pressed="false">ビフォー/アフター</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>画像の形</h2>
+    <div class="toggle" id="ratioToggle">
+      <button type="button" data-ratio="square" aria-pressed="true">■ 正方形</button>
+      <button type="button" data-ratio="wide" aria-pressed="false">▬ 横長</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>できあがり</h2>
+    <canvas id="preview" width="1080" height="1080"></canvas>
+    <p class="hint" id="hint">写真を2枚選ぶと、ここに比較画像が出ます</p>
+  </div>
+
+  <div class="panel">
+    <button type="button" id="save">PNGで保存</button>
+    <p class="errorline" id="error" role="status"></p>
+  </div>
+
+  <footer class="mw-footer">
+    <p>みちAIワークス（MICHI AI WORKS）／代表 田中　泉</p>
+    <p>運営: <a href="https://michi-portfolio.vercel.app/" rel="noopener">みちAIワークス 公式サイト</a>（https://michi-portfolio.vercel.app/ ）／ お問い合わせ: <a href="mailto:nncf123nncf@gmail.com">nncf123nncf@gmail.com</a></p>
+    <p>このツールはブラウザの中だけで動きます。選んだ写真の送信・保存・収集は一切行いません。</p>
+    <p>ログイン・会員登録・パスワードの入力を求めることはありません。</p>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var RATIOS = {
+    square: { w: 1080, h: 1080 },
+    wide:   { w: 1080, h: 608 }
+  };
+  var LABELS = {
+    en: { before: 'Before', after: 'After' },
+    ja: { before: 'ビフォー', after: 'アフター' }
+  };
+  var DIVIDER_W = 4;
+  var DIVIDER_COLOR = '#D5D8DC';
+  var BEFORE_BAND = '#3A3F46';
+  var BEFORE_TEXT = '#FFFFFF';
+  var AFTER_BAND  = '#4FB0FF';
+  var AFTER_TEXT  = '#06202E';
+
+  var state = { before: null, after: null, lang: 'en', ratio: 'square' };
+
+  var canvas = document.getElementById('preview');
+  var ctx = canvas.getContext('2d');
+  var errorEl = document.getElementById('error');
+  var hintEl = document.getElementById('hint');
+
+  function showError(msg) { errorEl.textContent = msg ? '⚠ ' + msg : ''; }
+
+  /* 中央基準のクロップ。描画先の縦横比に合わせて元画像の中央から切り出すので、
+     極端な縦長・横長の写真でも余白が出ず、はみ出しもしない。 */
+  function drawCoverImage(img, dx, dy, dw, dh) {
+    var sw = img.naturalWidth;
+    var sh = img.naturalHeight;
+    if (!sw || !sh) { return; }
+    var destRatio = dw / dh;
+    var srcRatio = sw / sh;
+    var cw, ch;
+    if (srcRatio > destRatio) {
+      ch = sh;
+      cw = sh * destRatio;
+    } else {
+      cw = sw;
+      ch = sw / destRatio;
+    }
+    var cx = (sw - cw) / 2;
+    var cy = (sh - ch) / 2;
+    ctx.drawImage(img, cx, cy, cw, ch, dx, dy, dw, dh);
+  }
+
+  function drawBand(text, bandColor, textColor, x, y, w, bandH) {
+    ctx.fillStyle = bandColor;
+    ctx.fillRect(x, y, w, bandH);
+    ctx.fillStyle = textColor;
+    ctx.font = '600 ' + Math.round(bandH * 0.52) + 'px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + w / 2, y + bandH / 2, w - 24);
+  }
+
+  function render() {
+    var size = RATIOS[state.ratio];
+    canvas.width = size.w;
+    canvas.height = size.h;
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, size.w, size.h);
+
+    var halfW = (size.w - DIVIDER_W) / 2;
+    var bandH = Math.round(size.h * 0.12);
+    var labels = LABELS[state.lang];
+
+    if (state.before) { drawCoverImage(state.before, 0, 0, halfW, size.h); }
+    if (state.after)  { drawCoverImage(state.after, halfW + DIVIDER_W, 0, halfW, size.h); }
+
+    drawBand(labels.before, BEFORE_BAND, BEFORE_TEXT, 0, 0, halfW, bandH);
+    drawBand(labels.after, AFTER_BAND, AFTER_TEXT, halfW + DIVIDER_W, 0, halfW, bandH);
+
+    ctx.fillStyle = DIVIDER_COLOR;
+    ctx.fillRect(halfW, 0, DIVIDER_W, size.h);
+
+    var ready = !!(state.before && state.after);
+    hintEl.textContent = ready
+      ? '保存すると ' + size.w + '×' + size.h + ' のPNGになります'
+      : '写真を2枚選ぶと、ここに比較画像が出ます';
+  }
+
+  function loadFile(file, slot, nameEl) {
+    if (!file) { return; }
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      state[slot] = img;
+      nameEl.textContent = file.name;
+      showError('');
+      render();
+    };
+    img.onerror = function () {
+      URL.revokeObjectURL(url);
+      state[slot] = null;
+      nameEl.textContent = 'まだ選ばれていません';
+      showError('この写真は読み込めませんでした。別の画像ファイルを選んでください。');
+      render();
+    };
+    img.src = url;
+  }
+
+  document.getElementById('beforeFile').addEventListener('change', function (e) {
+    loadFile(e.target.files[0], 'before', document.getElementById('beforeName'));
+  });
+  document.getElementById('afterFile').addEventListener('change', function (e) {
+    loadFile(e.target.files[0], 'after', document.getElementById('afterName'));
+  });
+
+  function bindToggle(containerId, attr, key) {
+    var container = document.getElementById(containerId);
+    var buttons = container.querySelectorAll('button');
+    container.addEventListener('click', function (e) {
+      var btn = e.target.closest('button');
+      if (!btn || !container.contains(btn)) { return; }
+      state[key] = btn.getAttribute(attr);
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].setAttribute('aria-pressed', buttons[i] === btn ? 'true' : 'false');
+      }
+      render();
+    });
+  }
+  bindToggle('langToggle', 'data-lang', 'lang');
+  bindToggle('ratioToggle', 'data-ratio', 'ratio');
+
+  document.getElementById('save').addEventListener('click', function () {
+    var missing = [];
+    if (!state.before) { missing.push('Before'); }
+    if (!state.after) { missing.push('After'); }
+    if (missing.length) {
+      showError(missing.join('と') + 'の写真がまだ選ばれていません。');
+      return;
+    }
+    showError('');
+    render();
+    var a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'before-after-' + state.ratio + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
