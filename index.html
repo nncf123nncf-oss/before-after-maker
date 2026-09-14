@@ -57,7 +57,9 @@
   input[type="file"]::file-selector-button {
     font-family: system-ui, sans-serif;
     font-size: 14px;
-    padding: 8px 12px;
+    /* タップ領域を44px以上にするため、8pxグリッドではなく12pxのpaddingで稼ぐ
+       （::file-selector-button は min-height の効きがブラウザで揺れるため） */
+    padding: 12px;
     margin-right: 8px;
     background: var(--bg);
     color: var(--text);
@@ -170,16 +172,16 @@
   </div>
 
   <div class="panel">
-    <h2>ラベルの言葉</h2>
-    <div class="toggle" id="langToggle">
+    <h2 id="langLabel">ラベルの言葉</h2>
+    <div class="toggle" id="langToggle" role="group" aria-labelledby="langLabel">
       <button type="button" data-lang="en" aria-pressed="true">Before/After</button>
       <button type="button" data-lang="ja" aria-pressed="false">ビフォー/アフター</button>
     </div>
   </div>
 
   <div class="panel">
-    <h2>画像の形</h2>
-    <div class="toggle" id="ratioToggle">
+    <h2 id="ratioLabel">画像の形</h2>
+    <div class="toggle" id="ratioToggle" role="group" aria-labelledby="ratioLabel">
       <button type="button" data-ratio="square" aria-pressed="true">■ 正方形</button>
       <button type="button" data-ratio="wide" aria-pressed="false">▬ 横長</button>
     </div>
@@ -187,7 +189,7 @@
 
   <div class="panel">
     <h2>できあがり</h2>
-    <canvas id="preview" width="1080" height="1080"></canvas>
+    <canvas id="preview" width="1080" height="1080" aria-label="Before/Afterの比較画像プレビュー"></canvas>
     <p class="hint" id="hint">写真を2枚選ぶと、ここに比較画像が出ます</p>
   </div>
 
@@ -258,7 +260,15 @@
     ctx.fillStyle = bandColor;
     ctx.fillRect(x, y, w, bandH);
     ctx.fillStyle = textColor;
-    ctx.font = '600 ' + Math.round(bandH * 0.52) + 'px system-ui, sans-serif';
+    /* canvasのfontはCSS shorthandとして解釈され、一部でも解釈できないと代入が
+       丸ごと無視されて既定の10px sans-serifのまま描かれる。system-uiは
+       canvasのfont shorthandで扱いが安定しない実装があるため、代入が反映
+       されたかを確かめ、駄目ならsans-serifへ落とす。 */
+    var px = Math.round(bandH * 0.52);
+    ctx.font = '600 ' + px + 'px system-ui, sans-serif';
+    if (ctx.font.indexOf(px + 'px') === -1) {
+      ctx.font = 'bold ' + px + 'px sans-serif';
+    }
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, x + w / 2, y + bandH / 2, w - 24);
@@ -291,12 +301,34 @@
       : '写真を2枚選ぶと、ここに比較画像が出ます';
   }
 
+  /* スロットごとの世代カウンタ。大きな写真を選んだ直後に選び直すと2枚が並行して
+     読み込まれ、先に選んだ方が後からonloadすると古い画像が最後に勝ってしまう。
+     最新の読み込み以外は結果を捨てる。 */
+  var seq = { before: 0, after: 0 };
+
+  function rejectFile(slot, nameEl, msg) {
+    state[slot] = null;
+    nameEl.textContent = 'まだ選ばれていません';
+    showError(msg);
+    render();
+  }
+
   function loadFile(file, slot, nameEl) {
     if (!file) { return; }
+    var token = ++seq[slot];
     var url = URL.createObjectURL(file);
     var img = new Image();
     img.onload = function () {
       URL.revokeObjectURL(url);
+      if (token !== seq[slot]) { return; }
+      /* 固有サイズを持たない画像（寸法指定のないSVG等）はonloadが正常に発火するが
+         naturalWidth/Heightが0になる。そのまま通すと片側が白紙のPNGが
+         エラーも出ずに保存されてしまうので、読み込み時点で弾く。 */
+      if (!img.naturalWidth || !img.naturalHeight) {
+        rejectFile(slot, nameEl,
+          'この写真はサイズを読み取れませんでした。別の画像ファイルを選んでください。');
+        return;
+      }
       state[slot] = img;
       nameEl.textContent = file.name;
       showError('');
@@ -304,10 +336,9 @@
     };
     img.onerror = function () {
       URL.revokeObjectURL(url);
-      state[slot] = null;
-      nameEl.textContent = 'まだ選ばれていません';
-      showError('この写真は読み込めませんでした。別の画像ファイルを選んでください。');
-      render();
+      if (token !== seq[slot]) { return; }
+      rejectFile(slot, nameEl,
+        'この写真は読み込めませんでした。別の画像ファイルを選んでください。');
     };
     img.src = url;
   }
@@ -345,8 +376,17 @@
     }
     showError('');
     render();
+    /* メモリ逼迫時などにtoDataURLが例外を投げると、直前にエラー表示を消しているため
+       画面が完全に無反応になる（利用者からは「ボタンが効かない」としか見えない）。 */
+    var dataUrl;
+    try {
+      dataUrl = canvas.toDataURL('image/png');
+    } catch (err) {
+      showError('画像の書き出しに失敗しました。写真のサイズを小さくして試してください。');
+      return;
+    }
     var a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
+    a.href = dataUrl;
     a.download = 'before-after-' + state.ratio + '.png';
     document.body.appendChild(a);
     a.click();
