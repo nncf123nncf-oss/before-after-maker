@@ -127,6 +127,19 @@
     overflow-wrap: anywhere;
   }
 
+  /* iPhone・iPadでは保存ボタンからのダウンロードが働かないため、
+     できあがった画像をここに出して長押しで保存してもらう。 */
+  #saveFallback { margin: 12px 0 0; }
+  #saveFallback p { font-size: 14px; color: var(--muted); margin: 0 0 8px; }
+  #saveFallback img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
   /* 運営者表記フッタ。ツール本体の配色に依存させず自己完結させる。 */
   .mw-footer {
     box-sizing: border-box;
@@ -196,6 +209,10 @@
   <div class="panel">
     <button type="button" id="save">PNGで保存</button>
     <p class="errorline" id="error" role="status"></p>
+    <div id="saveFallback" hidden>
+      <p id="saveFallbackNote"></p>
+      <img id="saveFallbackImg" alt="できあがった比較画像">
+    </div>
   </div>
 
   <footer class="mw-footer">
@@ -299,6 +316,10 @@
     hintEl.textContent = ready
       ? '保存すると ' + size.w + '×' + size.h + ' のPNGになります'
       : '写真を2枚選ぶと、ここに比較画像が出ます';
+
+    /* 写真や比率を変えたあとに、前回の長押し保存用の画像が残っていると
+       古い状態のものを保存してしまうため消す。 */
+    hideLongPressSave();
   }
 
   /* スロットごとの世代カウンタ。大きな写真を選んだ直後に選び直すと2枚が並行して
@@ -366,6 +387,43 @@
   bindToggle('langToggle', 'data-lang', 'lang');
   bindToggle('ratioToggle', 'data-ratio', 'ratio');
 
+  var fallbackBox = document.getElementById('saveFallback');
+  var fallbackNote = document.getElementById('saveFallbackNote');
+  var fallbackImg = document.getElementById('saveFallbackImg');
+
+  /* iPadOSはUA上Macを名乗るため、タッチの有無も併せて見る。 */
+  function isApplePortable() {
+    var ua = navigator.userAgent || '';
+    if (/iPhone|iPad|iPod/.test(ua)) { return true; }
+    return /Mac/.test(ua) && 'ontouchend' in document;
+  }
+
+  /* 共有シートに渡すため、data URLを同期的にFileへ変換する。
+     canvas.toBlobは非同期で、待っている間に「利用者の操作中」と見なされなくなり
+     iOSで共有シートが開かなくなるので使わない。 */
+  function dataUrlToFile(dataUrl, name) {
+    if (typeof File !== 'function' || typeof atob !== 'function') { return null; }
+    var comma = dataUrl.indexOf(',');
+    if (comma < 0) { return null; }
+    var bin = atob(dataUrl.slice(comma + 1));
+    var buf = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) { buf[i] = bin.charCodeAt(i); }
+    return new File([buf], name, { type: 'image/png' });
+  }
+
+  function showLongPressSave(dataUrl) {
+    fallbackImg.src = dataUrl;
+    fallbackNote.textContent =
+      '下の画像を長押しして「"写真"に追加」または「画像を保存」を選んでください。';
+    fallbackBox.hidden = false;
+  }
+
+  function hideLongPressSave() {
+    fallbackBox.hidden = true;
+    fallbackImg.removeAttribute('src');
+    fallbackNote.textContent = '';
+  }
+
   document.getElementById('save').addEventListener('click', function () {
     var missing = [];
     if (!state.before) { missing.push('Before'); }
@@ -385,9 +443,34 @@
       showError('画像の書き出しに失敗しました。写真のサイズを小さくして試してください。');
       return;
     }
+    var filename = 'before-after-' + state.ratio + '.png';
+
+    /* iPhone・iPadは a.download を無視し、data URLへの遷移も止めるため、
+       従来のダウンロード方式だと押しても何も起きない（Day039公開後に判明）。
+       ブラウザ名では判別できない（iOSのChromeも中身はSafariと同じ）ので、
+       端末側で分ける。 */
+    if (isApplePortable()) {
+      var shared = false;
+      try {
+        var file = dataUrlToFile(dataUrl, filename);
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+          shared = true;
+          navigator.share({ files: [file] })['catch'](function (err) {
+            /* 共有シートを閉じただけなら何も出さない。それ以外は長押し保存に回す。 */
+            if (!err || err.name !== 'AbortError') { showLongPressSave(dataUrl); }
+          });
+        }
+      } catch (err) {
+        shared = false;
+      }
+      if (!shared) { showLongPressSave(dataUrl); }
+      return;
+    }
+
+    hideLongPressSave();
     var a = document.createElement('a');
     a.href = dataUrl;
-    a.download = 'before-after-' + state.ratio + '.png';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
